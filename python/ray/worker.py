@@ -1085,11 +1085,12 @@ def check_main_thread():
         Exception: An exception is raised if this is called on a thread other
             than the main thread.
     """
-    if threading.current_thread().getName() != "MainThread":
-        raise Exception("The Ray methods are not thread safe and must be "
-                        "called from the main thread. This method was called "
-                        "from thread {}."
-                        .format(threading.current_thread().getName()))
+    pass
+    # if threading.current_thread().getName() != "MainThread":
+    #     raise Exception("The Ray methods are not thread safe and must be "
+    #                     "called from the main thread. This method was called "
+    #                     "from thread {}."
+    #                     .format(threading.current_thread().getName()))
 
 
 def print_failed_task(task_status):
