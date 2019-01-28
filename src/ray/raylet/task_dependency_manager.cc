@@ -45,11 +45,11 @@ bool TaskDependencyManager::CheckObjectRequired(const ObjectID &object_id) const
   return true;
 }
 
-void TaskDependencyManager::HandleRemoteDependencyRequired(const ObjectID &object_id) {
+void TaskDependencyManager::HandleRemoteDependencyRequired(const ObjectID &object_id, bool waiting = false) {
   bool required = CheckObjectRequired(object_id);
   // If the object is required, then try to make the object available locally.
   if (required) {
-    auto inserted = required_objects_.insert(object_id);
+    auto inserted = waiting ? waiting_objects_.insert(object_id) : blocked_objects_.insert(object_id);
     if (inserted.second) {
       // If we haven't already, request the object manager to pull it from a
       // remote node.
@@ -63,11 +63,16 @@ void TaskDependencyManager::HandleRemoteDependencyCanceled(const ObjectID &objec
   bool required = CheckObjectRequired(object_id);
   // If the object is no longer required, then cancel the object.
   if (!required) {
-    auto it = required_objects_.find(object_id);
-    if (it != required_objects_.end()) {
+    auto it = blocked_objects_.find(object_id);
+    if (it != blocked_objects_.end()) {
       object_manager_.CancelPull(object_id);
       reconstruction_policy_.Cancel(object_id);
-      required_objects_.erase(it);
+      blocked_objects_.erase(it);
+    } else {
+        it = waiting_objects_.find(object_id);
+        object_manager_.CancelPull(object_id);
+        reconstruction_policy_.Cancel(object_id);
+        waiting_objects_.erase(it);
     }
   }
 }
@@ -95,6 +100,12 @@ std::vector<TaskID> TaskDependencyManager::HandleObjectLocal(
         }
       }
     }
+  }
+  // Unsubscribe waiting objects
+  auto it = waiting_objects_.find(object_id);
+  if (it != waiting_objects_.end()) {
+    UnsubscribeDependencies(ComputeTaskId(object_id));
+    waiting_objects_.erase(it);
   }
 
   // The object is now local, so cancel any in-progress operations to make the
@@ -317,13 +328,24 @@ void TaskDependencyManager::RemoveTasksAndRelatedObjects(
 
   // TODO: the size of required_objects_ could be large, consider to add
   // an index if this turns out to be a perf problem.
-  for (auto it = required_objects_.begin(); it != required_objects_.end();) {
+  for (auto it = blocked_objects_.begin(); it != blocked_objects_.end();) {
     const auto object_id = *it;
     TaskID creating_task_id = ComputeTaskId(object_id);
     if (task_ids.find(creating_task_id) != task_ids.end()) {
       object_manager_.CancelPull(object_id);
       reconstruction_policy_.Cancel(object_id);
-      it = required_objects_.erase(it);
+      it = blocked_objects_.erase(it);
+    } else {
+      it++;
+    }
+  }
+  for (auto it = waiting_objects_.begin(); it != waiting_objects_.end();) {
+    const auto object_id = *it;
+    TaskID creating_task_id = ComputeTaskId(object_id);
+    if (task_ids.find(creating_task_id) != task_ids.end()) {
+      object_manager_.CancelPull(object_id);
+      reconstruction_policy_.Cancel(object_id);
+      it = waiting_objects_.erase(it);
     } else {
       it++;
     }
@@ -335,7 +357,9 @@ std::string TaskDependencyManager::DebugString() const {
   result << "TaskDependencyManager:";
   result << "\n- task dep map size: " << task_dependencies_.size();
   result << "\n- task req map size: " << required_tasks_.size();
-  result << "\n- req objects map size: " << required_objects_.size();
+  // result << "\n- req objects map size: " << required_objects_.size();
+  result << "\n- blocked objects map size: " << blocked_objects_.size();
+  result << "\n- waiting objects map size: " << waiting_objects_.size();
   result << "\n- local objects map size: " << local_objects_.size();
   result << "\n- pending tasks map size: " << pending_tasks_.size();
   return result.str();

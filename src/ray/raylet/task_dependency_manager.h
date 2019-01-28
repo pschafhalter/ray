@@ -152,7 +152,7 @@ class TaskDependencyManager {
   bool CheckObjectRequired(const ObjectID &object_id) const;
   /// If the given object is required, then request that the object be made
   /// available through object transfer or reconstruction.
-  void HandleRemoteDependencyRequired(const ObjectID &object_id);
+  void HandleRemoteDependencyRequired(const ObjectID &object_id, bool waiting);
   /// If the given object is no longer required, then cancel any in-progress
   /// operations to make the object available through object transfer or
   /// reconstruction.
@@ -191,7 +191,9 @@ class TaskDependencyManager {
   /// Objects that are required by a subscribed task, are not local, and are
   /// not created by a pending task. For these objects, there are pending
   /// operations to make the object available.
-  std::unordered_set<ray::ObjectID> required_objects_;
+  // std::unordered_set<ray::ObjectID> required_objects_;
+  std::unordered_set<ray::ObjectID> blocked_objects_;
+  std::unordered_set<ray::ObjectID> waiting_objects_;
   /// The set of locally available objects.
   std::unordered_set<ray::ObjectID> local_objects_;
   /// The set of tasks that are pending execution. Any objects created by these
